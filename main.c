@@ -20,6 +20,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "math.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -46,7 +47,9 @@ TIM_HandleTypeDef htim8;
 
 /* USER CODE BEGIN PV */
 uint32_t zamanMS, zamanS; // MS VE S CİNSİ ZAMAN
-float saatTersi2x, saatYonu2x, Ap, Bp, RPMA, RPMB, aciX, aciY, aci, X, Y;
+float saatTersi2x, saatYonu2x, Ap, Bp, RPMA, RPMB, aciX, aciY, aci, X, Y, aciTemp=0, ACI;
+
+uint8_t bir, iki, g;
 
 uint8_t saat_yonu;  // 1 = SAAT YÖNÜ, 0 = SAAT YÖNÜ TERSİ
 
@@ -74,7 +77,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if(htim ->Instance == TIM1){
 	  //100 MS TIMER
 
-
 	  //////////
 	  //SAAT YÖNÜNE GÖRE KULLANILACAK KATSAYILAR
 	  if(saat_yonu == 1){
@@ -95,30 +97,60 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
   if(htim ->Instance == TIM8){
 	  //1 MS TIMER
-
 	  zamanMS++;
 	  zamanS = zamanMS/1000;
 	  //SAAT YÖNÜ DÖNERKEN 2*saatYonu2x = saatTersi2x
 	  //SAAT YÖNÜ TERSİ DÖNERKEN 2*saatTersi2x = saatYonu2x
-	  if(saatTersi2x >= saatYonu2x){
+	  if(saatTersi2x > saatYonu2x){
+		  if(saat_yonu){
+			  X=0;
+			  Y=0;
+			  aciTemp += aci;
+		  }
 		  saat_yonu = 0;
+
+		  g = 1;
 	  }
 	  if(saatYonu2x > saatTersi2x){
+		  if(!saat_yonu){
+			  Y=0;
+			  X=0;
+			  aciTemp -= aci;
+		  }
 		  saat_yonu = 1;
+		  g = -1;
 	  }
+
+
   }
 }
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
+	//RİSİNG EDGE İNTERRUPT FONKSİYONU
+
   if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1)){
 	  saatTersi2x++; //733(SAAT YÖNÜ TERSİ) MAVİ KABLO A1 PİNİ
+	  /*if(g == 1){
+		  X++;
+	  }
+	  else{
+		  X--;
+	  }
+	  */
 	  X++; // ACI DEĞERİ İÇİN
-	  
 	  /* saatTersi2x += yon; //PROTOTİP */
   }
   if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_2)){
 	  saatYonu2x++; //1464(SAAT YÖNÜ) DALGA MOR KABLO A2 PİNİ
-	  Y++; // ACI DEĞERİ İÇİN
+	  /*if(g == 1){
+		  Y++;
+	  }
+	  else{
+		  Y--;
+	  }
+	  */
+
+	  Y++;
   }
 
 }
@@ -164,32 +196,41 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
 	  if(saat_yonu){
-		  //aciX = (X/733)*360; // KONROL DEĞERLERİ
-		  //aciY = (Y/1464)*360;
+		  aciX = (X/733)*360; // KONROL DEĞERLERİ
+		  aciY = (Y/1464)*360;
 
-		  aci = (X/733)*360; // GERÇEK DEĞER
-
-		  if(X >= 733){
+		  aci = (X/733)*360; // GERÇEK DEĞE
+		  if(X >= 733 || X <= -733){
 			  X=0; // X SAAT YÖNÜ ÇEVRİLDİĞİNDE TAM TURDA SIFIRLANMASI
 		  }
-		  if(Y >= 1464){
+		  if(Y >= 1464 || Y <= -1464){
 			  Y=0; // Y SAAT YÖNÜ ÇEVRİLDİĞİNDE TAM TURDA SIFIRLANMASI
 		  }
+		  ACI = aciTemp + aci;
 	  }
 	  else if(!saat_yonu){
-		  //aciX = (X/1464)*360;
-		  //aciY = (Y/733)*360;
+		  aciX = (X/1464)*360;
+		  aciY = (Y/733)*360;
 
 		  aci = (X/1464)*360; //GERÇEK DEĞER
-
-		  if(X >= 1464){
+		  if(X >= 1464 || X <= -1464){
 			  X=0; // X SAAT YÖNÜ TERSİ ÇEVRİLDİĞİNDE TAM TURDA SIFIRLANMASI
 		  }
-		  if(Y >= 733){
+		  if(Y >= 733 || Y <= -733){
 			  Y=0; // Y SAAT YÖNÜ TERSİ ÇEVRİLDİĞİNDE TAM TURDA SIFIRLANMASI
 		  }
+		  ACI = aciTemp - aci;
 	  }
+
+	  /*ACI = aciTemp + aci;
+	  if(ACI > 360 || ACI < -360){
+		 // ACI = ACI - ((int)(ACI/360))*360;
+
+	  }
+	  */
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
