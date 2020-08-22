@@ -23,7 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "stdbool.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,8 +45,18 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim8;
 
 /* USER CODE BEGIN PV */
-int maviSinyal, maviTemp, morTemp, maviTempTemp, saat_yonu;
+int maviSinyal, maviTemp, morTemp, maviTempTemp;
+/*
+ * maviSinyal: MAVI KABLODAN GELEN SINYALERIN TOPLAMI
+ * maviTemp: MAVI KABLODAN GELEN SINYALERIN TOPLAMI, saat_yonu BULMAK ICIN KULLANILIR.
+ * HER 1 MS DE 1464 VE -1464 DEĞERLERİNİ GECTIGINDE SIFIRLANIR
+ * morTemp: MOR KABLODAN GELEN SINYALERIN TOPLAMI. maviTemp ILE AYNI ISLEME SAHIP.
+ * maviTempTemp: RPM HESABI ICIN KULLANILIR. HER 100 MS DE SIFIRLANIR.
+ */
+bool saat_yonu; // SAAT YONU DONERSE TRUE, TERSI DONERSE FALSE
 float aci, RPM;
+bool deneme; //WHILE ICINDE ENGEL OLMADIGI TEMSILI, BLINK LEDI
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -60,8 +70,9 @@ static void MX_TIM8_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) // RISING EDGE INTERRUPT FONKSIYONLARI
 {
+
   /* Prevent unused argument(s) compilation warning */
   UNUSED(GPIO_Pin);
   /* NOTE: This function Should not be modified, when the callback is needed,
@@ -69,49 +80,50 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
    */
   if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1)){
 	  /*
+	   *RISING EDGE
 	   *MAVI KABLO
 	   *PIN A1
-	   *SAAT TERSINDE(saat_yonu == 0) 1464
-	   *SAAT YONUNDE(saat_yonu == 1) 733
+	   *SAAT TERSINDE(saat_yonu == FALSE), RPM VE ACI POZITIF 1464
+	   *SAAT YONUNDE(saat_yonu == TRUE) RPM VE ACI NEGATIF 733
 	   */
 	  maviTemp++;
 	  if(!saat_yonu){
-		  maviSinyal++;
-		  maviTempTemp++;
+		  maviSinyal++; // MAVI KABLODAN GELEN SINYALLERIN TOPLAMI (YON TAYINI ICIN)
+		  maviTempTemp++; // MAVI KABLODAN GELEN SINYALLERIN TOPLAMI (RPM ICIN)
+
 	  }
 	  if(saat_yonu){
-		  maviSinyal -=2;
+		  maviSinyal -=2; //SAAT YONUNDE DURUMUNDA GELEN SINYALLERIN KAYDEDILMESI
+		  //SAAT YONUNDE FREKANSLAR YARIM GELDIGI ICIN IKISER OLARAK TOPLUYORUZ
 		  maviTempTemp -= 2;
 	  }
-
   }
   if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_2)){
 	  /*
+	   *RISING EDGE
 	   *MOR KABLO
 	   *PIN A2
-	   *SAAT TERSINDE (saat_yonu == 0) 733
-	   *SAAT YONUNDE (saat_yonu == 1) 1464
+	   *SAAT TERSINDE (saat_yonu == FALSE) 733
+	   *SAAT YONUNDE (saat_yonu == TRUE) 1464
 	   */
-	  morTemp++;
+	  morTemp++; //MOR KABLODAN GELEN SINYALLERIN TOPLAMI
   }
 }
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //TIMER INTERRUPT FONKSIYONU
 	if(htim -> Instance == TIM1){
 		//1 MS TIMER
-		
+
 		if(morTemp > maviTemp)
-			saat_yonu=1;
-		if(morTemp < maviTemp)
+			saat_yonu=1; // ILK GELEN SINYALE GORE YON TAYINI
+		else
 			saat_yonu=0;
 
-		if(maviSinyal > 1464)
+		if(maviSinyal > 1464 || maviSinyal < -1464) //TOPLAM SINYALLERIN SIFIRLANMASI (BIR TUR 1464 TIK)
 			maviSinyal =0;
-		if(maviSinyal < -1464)
-			maviSinyal = 0;
 
-		aci = (((float)(maviSinyal))/1464)*360;
-		
+		aci = (((float)(maviSinyal))/1464)*360; //ACI HESABI
+
 	}
 
 
@@ -119,13 +131,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 
 	if(htim -> Instance == TIM8){
 		//100 MS TIMER
-		
-		RPM = (((float)(maviTempTemp))/1464)*10*60;
-		
+
+		RPM = (((float)(maviTempTemp))/1464)*10*60;  //RPM HESABI
+
+		//SIFIRLANMALAR
+
 		morTemp =0;
 		maviTempTemp =0;
 		maviTemp=0;
-		
+
 	}
 }
 /* USER CODE END 0 */
@@ -169,6 +183,12 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  // BURALARI CIDDIYE ALMAYIN
+	 deneme = !deneme;
+	 //HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13);
+	 HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, deneme);
+	 HAL_Delay(1000);
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -323,12 +343,23 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : MAV__Pin MOR_Pin */
   GPIO_InitStruct.Pin = MAV__Pin|MOR_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PD13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
